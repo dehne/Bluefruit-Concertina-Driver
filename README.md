@@ -1,4 +1,4 @@
-#Driver for MIDI concertina running on Adafruit's Bluefruit 32u4.
+# Driver for MIDI concertina running on Adafruit's Bluefruit 32u4.
 
 The concertina's keyboard consists of a 14-column by 4-row matrix of buttons. Each button 
 consists of a normally open pushbutton switch in series with a diode. The anode of the 
