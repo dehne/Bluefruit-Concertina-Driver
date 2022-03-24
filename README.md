@@ -40,4 +40,4 @@ on pin P_SENSE. The absoulte value of the pressure difference between the inside
 of the bellows tells how hard the bellows is being worked. This value is used to to set the 
 MIDI expression pedal (instrument volume) value via a pressure-to-expression transfer 
 function. Approximately every EXP_MSG_MS milliseconds the pressure is read, transformed 
-to an expression value and sent via MIDI as an expression ppedal value.
+to an expression value and sent via MIDI as an expression pedal value.
