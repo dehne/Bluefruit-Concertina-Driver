@@ -1,5 +1,9 @@
 # Driver for MIDI concertina running on Adafruit's Bluefruit 32u4.
 
+The overall project with photos and description may be found on Hackaday 
+[here](https://hackaday.io/project/167145-concertina-midi-controller). This repo contains 
+the Adruino code for driving it.
+
 The concertina's keyboard consists of a 14-column by 4-row matrix of buttons. Each button 
 consists of a normally open pushbutton switch in series with a diode. The anode of the 
 diode is connected to the button's row. Its cathode is connected to the switch. The other 
