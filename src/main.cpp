@@ -152,15 +152,17 @@
 #define BC_STEP         (0.005)         // Step size for t
 #define TF_COUNT        (PRS_MAX + 1)   // Count of transfer function values
 
-#define EXP_MAX_ERR     (3)             // Max tolerable expresson error (integer percent)
-#define EXP_MAX_STEP    (5)             // The maximum one-step change in expression (integer percent)
+#define EXP_MAX_ERR     (2)             // Max tolerable expresson error (integer percent)
+#define EXP_MAX_STEP    (3)             // The maximum one-step change in expression (integer percent)
 #define EXP_MIN_MILLIS  (10)            // Won't send expression pedal messages more frequently than this
+#define EXP_DUMP_MILLIS (10000)         // For debugging: interval (ms) for dumping expression pedal info to Serial
 
 /*
  * Other symbolic constants
  */
-#define BANNER                  F("Bluefruit concertina driver v0.3.0")
-#define VERBOSE_MODE            (false) // Set to true to enable debug output
+#define BANNER                  F("Bluefruit concertina driver v0.3.6")
+//#define VERBOSE_MODE                    // Uncomment to enable debug output
+//#define DEBUG_EXP                       // Uncomment to enable expression pedal debugging
 #define COL_COUNT               (14)    // Number of columns in matrix
 #define ROW_COUNT               (4)     // Number of rows in matrix
 #define COL_SEL                 (LOW)   // A column is selected when its pin is grounded
@@ -238,7 +240,7 @@ void error(const __FlashStringHelper* err) {
  */
 void connected(void) {
   isConnected = true;
-  #if VERBOSE_MODE
+  #ifdef VERBOSE_MODE
     Serial.println(F("Connected."));
   #endif
   setStatus(STATUS_CONND);
@@ -248,7 +250,7 @@ void connected(void) {
   analogRead(P_SENSE);                    // Emprirically, pressure sensor first reading is bogus
   delay(1000);                            // And it needs some time to get its act together
   initialPressure = analogRead(P_SENSE);  // But after a second it's good to go
-  #if VERBOSE_MODE
+  #ifdef VERBOSE_MODE
     Serial.print(F("Initial pressure: "));
     Serial.println(initialPressure);
   #endif
@@ -267,7 +269,7 @@ void connected(void) {
  */
 void disconnected(void) {
   isConnected = false;
-  #if VERBOSE_MODE
+  #ifdef VERBOSE_MODE
     Serial.println("Disconnected.");
   #endif
   setStatus(STATUS_DISCO);
@@ -323,7 +325,7 @@ void setup() {
     tfVal[ix] = tfY;
     t -= BC_STEP;
   }
-  #if VERBOSE_MODE
+  #ifdef VERBOSE_MODE
     Serial.println(F("Bellows pressure to MIDI expression lookup table."));
     for (int ix = 0; ix < TF_COUNT; ix++) {
       Serial.print(F("("));
@@ -339,18 +341,24 @@ void setup() {
   #endif
 
   // Initialize the Bluetooth radio module
-  #if VERBOSE_MODE
+  #ifdef VERBOSE_MODE
     Serial.print(F("Initialising Bluefruit BLE module: "));
   #endif
-  if (!ble.begin(VERBOSE_MODE)) {
+  if (!ble.begin(
+    #ifdef VERBOSE_MODE 
+      true 
+    #else 
+      false 
+    #endif
+    )) {
     error(F("Couldn't find BLE module."));
   }
-  #if VERBOSE_MODE
+  #ifdef VERBOSE_MODE
     Serial.println(F("OK!"));
   #endif
 
   // Perform a factory reset to make sure everything is in a known state
-  #if VERBOSE_MODE
+  #ifdef VERBOSE_MODE
     Serial.println(F("Performing a factory reset: "));
   #endif
   if (!ble.factoryReset()) {
@@ -358,7 +366,7 @@ void setup() {
   }
   ble.echo(false);
 
-  #if VERBOSE_MODE
+  #ifdef VERBOSE_MODE
     Serial.println("Bluetooth radio module info:");
     ble.info();
   #endif
@@ -371,7 +379,7 @@ void setup() {
   midi.setRxCallback(bleMidiRX);
 
   // Enable MIDI
-  #if VERBOSE_MODE
+  #ifdef VERBOSE_MODE
     Serial.println(F("Enable MIDI: "));
   #endif
   if (!midi.begin(true)) {
@@ -379,7 +387,7 @@ void setup() {
   }
 
   ble.verbose(false);
-  #if VERBOSE_MODE
+  #ifdef VERBOSE_MODE
     Serial.print(F("Waiting for a connection..."));
   #endif
 
@@ -415,6 +423,13 @@ void loop() {
   // often enough to rrasonably track the bellows pressure without using up all the MIDI BLE
   // bandwidth and to do it smoothly enough to avoid audible jumps in volume.
   unsigned long nowMillis = millis();
+  #ifdef DEBUG_EXP
+    static int expCount = 0;
+    static unsigned long dumpMillis = 0;
+    if (dumpMillis == 0) {
+      dumpMillis = nowMillis;
+    }
+  #endif
   if (nowMillis - expMillis > EXP_MIN_MILLIS) {
     int nowExpVal = tfVal[getPress()];
     int pctChange = (abs(nowExpVal - expVal) * 100) / expVal;
@@ -426,15 +441,27 @@ void loop() {
           nowExpVal = max(expVal - ((EXP_MAX_STEP * 100) / expVal), EXP_MIN);
         }
       }
+      #ifdef DEBUG_EXP
+        expCount++;
+      #endif
       midi.send(MIDI_CTRL_CHG, EXP_CTRL, nowExpVal);
       expVal = nowExpVal;
-      #if VERBOSE_MODE
+      #ifdef VERBOSE_MODE
         Serial.print(F("Expression "));
         Serial.println(expVal);
       #endif
     }
     expMillis = nowMillis;
   }
+  #ifdef DEBUG_EXP
+    if (nowMillis - dumpMillis > EXP_DUMP_MILLIS) {
+      Serial.print(F("Expression pedal message rate: "));
+      Serial.print(expCount * 1000.0 / EXP_DUMP_MILLIS);
+      Serial.println(" msg/sec.");
+      expCount = 0;
+      dumpMillis = nowMillis;
+    }
+  #endif
 
   // Advance selected column to curCol. The hardware consists of two HC164 shift registers configured
   // to act as a single 14-bit shift register. Selecting a column consists of making that column's output
@@ -462,7 +489,7 @@ void loop() {
     if (curColSw[row] != sw[row][curCol]) {
       sw[row][curCol] = curColSw[row];
       midi.send(MIDI_NOTE_ON, midiNote[row][curCol], curColSw[row] == SW_DN ? 127 : 0);
-      #if VERBOSE_MODE
+      #ifdef VERBOSE_MODE
         Serial.print(F("Button "));
         Serial.print(name.charAt(curCol));
         Serial.print(name.charAt(row));
