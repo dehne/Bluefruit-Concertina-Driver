@@ -69,7 +69,7 @@
  *
  *  @file     main.cpp 
  * 
- *  @version  Version 0.3.0, March 2022
+ *  @version  Version 0.3.5, April 2022
  *
  *  @author   D. L. Ehnebuske
  *
@@ -81,14 +81,17 @@
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted provided that the following conditions are met:
- *  1. Redistributions of source code must retain the above copyright
- *  notice, this list of conditions and the following disclaimer.
- *  2. Redistributions in binary form must reproduce the above copyright
- *  notice, this list of conditions and the following disclaimer in the
- *  documentation and/or other materials provided with the distribution.
- *  3. Neither the name of the copyright holders nor the
- *  names of its contributors may be used to endorse or promote products
- *  derived from this software without specific prior written permission.
+ * 
+ *    1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 
+ *    2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 
+ *    3. Neither the name of the copyright holders nor the
+ *    names of its contributors may be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
  *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS ''AS IS'' AND ANY
  *  EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -133,15 +136,15 @@
  *  A Bézier curve, S0, is defined as: s0 = (1 − t)^3 * P0 + 3 * (1 − t)^2 * t * P1 + 3 * (1 − t) * t^2 * P2 + t^3 * P3
  *  Where t∈[0,1]. See http://www.malinc.se/m/DeCasteljauAndBezier.php
  */
-#define EXP_MIN         (30)            // MIDI "Expression" minimum value
+#define EXP_MIN         (50)            // MIDI "Expression" minimum value
 #define EXP_MAX         (127)           // MIDI "Expression" maximum value
 #define PRS_MIN         (1)             // Minimum getPressure() pressure sensor value
 #define PRS_MAX         (120)           // Maximum getPressure() pressure sensor value
 #define P0_X            (0)             // Anchor point 1
 #define P0_Y            (EXP_MIN)
-#define P1_X            (30)            // Control point 1
-#define P1_Y            (55)
-#define P2_X            (20)            // Control point 2
+#define P1_X            (15)            // Control point 1
+#define P1_Y            (50)
+#define P2_X            (15)            // Control point 2
 #define P2_Y            (EXP_MAX)
 #define P3_X            (PRS_MAX)       // Anchor point 2
 #define P3_Y            (EXP_MAX)
@@ -149,13 +152,15 @@
 #define BC_STEP         (0.005)         // Step size for t
 #define TF_COUNT        (PRS_MAX + 1)   // Count of transfer function values
 
-#define EXP_MAX_ERROR   (3)             // Send expression pedal msg if pressure changes by more than this
+#define EXP_MAX_ERR     (3)             // Max tolerable expresson error (integer percent)
+#define EXP_MAX_STEP    (5)             // The maximum one-step change in expression (integer percent)
+#define EXP_MIN_MILLIS  (10)            // Won't send expression pedal messages more frequently than this
 
 /*
  * Other symbolic constants
  */
 #define BANNER                  F("Bluefruit concertina driver v0.3.0")
-#define VERBOSE_MODE            (true)  // Set to true to enable debug output
+#define VERBOSE_MODE            (false) // Set to true to enable debug output
 #define COL_COUNT               (14)    // Number of columns in matrix
 #define ROW_COUNT               (4)     // Number of rows in matrix
 #define COL_SEL                 (LOW)   // A column is selected when its pin is grounded
@@ -288,7 +293,7 @@ void bleMidiRX(uint16_t timestamp, uint8_t status, uint8_t byte1, uint8_t byte2)
 void setup() {
   // Say hello
   Serial.begin(9600);
-  delay(2000);
+  delay(4000);
   Serial.println(BANNER);
 
   // Set up status LED
@@ -403,17 +408,32 @@ void loop() {
     return;
   }
 
-  // Set expression pedal(instrument volume) based on bellows pressure. Send an expression pedal 
-  // message whenever the difference between the just-read expression pedal value and the current 
-  // expression pedal value is more than EXP_MAX_ERROR
-  int newExpVal = tfVal[getPress()];
-  if (abs(newExpVal - expVal) > EXP_MAX_ERROR) {
-      expVal = newExpVal;
-      midi.send(MIDI_CTRL_CHG, EXP_CTRL, expVal);
+  // Set expression pedal (instrument volume) based on bellows pressure. Set it a maximum of once 
+  // every EXP_MIN_MILLIS ms and even then only if the error betwen what it's currently set to 
+  // and what the bellows pressure indicates it shuld be differs by more than EXP_MAX_ERR integer 
+  // percent. But don't change it by more than EXP_MAX_STEP integer percent. The idea is to set it 
+  // often enough to rrasonably track the bellows pressure without using up all the MIDI BLE
+  // bandwidth and to do it smoothly enough to avoid audible jumps in volume.
+  unsigned long nowMillis = millis();
+  if (nowMillis - expMillis > EXP_MIN_MILLIS) {
+    int nowExpVal = tfVal[getPress()];
+    int pctChange = (abs(nowExpVal - expVal) * 100) / expVal;
+    if (pctChange > EXP_MAX_ERR) {
+      if (pctChange > EXP_MAX_STEP) {
+        if (nowExpVal > expVal) {
+          nowExpVal = min(expVal + ((EXP_MAX_STEP * 100) / expVal), EXP_MAX);
+        } else {
+          nowExpVal = max(expVal - ((EXP_MAX_STEP * 100) / expVal), EXP_MIN);
+        }
+      }
+      midi.send(MIDI_CTRL_CHG, EXP_CTRL, nowExpVal);
+      expVal = nowExpVal;
       #if VERBOSE_MODE
         Serial.print(F("Expression "));
         Serial.println(expVal);
       #endif
+    }
+    expMillis = nowMillis;
   }
 
   // Advance selected column to curCol. The hardware consists of two HC164 shift registers configured
