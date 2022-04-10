@@ -142,8 +142,8 @@
 #define PRS_MAX         (120)           // Maximum getPressure() pressure sensor value
 #define P0_X            (0)             // Anchor point 1
 #define P0_Y            (EXP_MIN)
-#define P1_X            (15)            // Control point 1
-#define P1_Y            (50)
+#define P1_X            (10)            // Control point 1
+#define P1_Y            (EXP_MIN)
 #define P2_X            (15)            // Control point 2
 #define P2_Y            (EXP_MAX)
 #define P3_X            (PRS_MAX)       // Anchor point 2
@@ -152,9 +152,9 @@
 #define BC_STEP         (0.005)         // Step size for t
 #define TF_COUNT        (PRS_MAX + 1)   // Count of transfer function values
 
-#define EXP_MAX_ERR     (2)             // Max tolerable expresson error (integer percent)
-#define EXP_MAX_STEP    (3)             // The maximum one-step change in expression (integer percent)
-#define EXP_MIN_MILLIS  (10)            // Won't send expression pedal messages more frequently than this
+#define EXP_MAX_ERR     (5)             // Max tolerable expresson error (integer tenths of a percent)
+#define EXP_MAX_STEP    (20)            // The maximum one-step change in expression (integer tenths of a percent)
+#define EXP_MIN_MILLIS  (35)            // Won't send expression pedal messages more frequently than this
 #define EXP_DUMP_MILLIS (10000)         // For debugging: interval (ms) for dumping expression pedal info to Serial
 
 /*
@@ -432,13 +432,13 @@ void loop() {
   #endif
   if (nowMillis - expMillis > EXP_MIN_MILLIS) {
     int nowExpVal = tfVal[getPress()];
-    int pctChange = (abs(nowExpVal - expVal) * 100) / expVal;
-    if (pctChange > EXP_MAX_ERR) {
-      if (pctChange > EXP_MAX_STEP) {
+    int pctChangeX10 = (abs(nowExpVal - expVal) * 1000) / expVal;
+    if (pctChangeX10 > EXP_MAX_ERR) {
+      if (pctChangeX10 > EXP_MAX_STEP) {
         if (nowExpVal > expVal) {
-          nowExpVal = min(expVal + ((EXP_MAX_STEP * 100) / expVal), EXP_MAX);
+          nowExpVal = min(expVal + ((EXP_MAX_STEP * 10) / expVal), EXP_MAX);
         } else {
-          nowExpVal = max(expVal - ((EXP_MAX_STEP * 100) / expVal), EXP_MIN);
+          nowExpVal = max(expVal - ((EXP_MAX_STEP * 10) / expVal), EXP_MIN);
         }
       }
       #ifdef DEBUG_EXP
