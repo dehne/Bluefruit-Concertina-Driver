@@ -154,7 +154,7 @@
 
 #define EXP_MAX_ERR     (5)             // Max tolerable expresson error (integer tenths of a percent)
 #define EXP_MAX_STEP    (20)            // The maximum one-step change in expression (integer tenths of a percent)
-#define EXP_MIN_MILLIS  (35)            // Won't send expression pedal messages more frequently than this
+#define EXP_MIN_MILLIS  (40)            // Won't send expression pedal messages more frequently than this
 #define EXP_DUMP_MILLIS (10000)         // For debugging: interval (ms) for dumping expression pedal info to Serial
 
 /*
@@ -432,7 +432,7 @@ void loop() {
   #endif
   if (nowMillis - expMillis > EXP_MIN_MILLIS) {
     int nowExpVal = tfVal[getPress()];
-    int pctChangeX10 = (abs(nowExpVal - expVal) * 1000) / expVal;
+    int pctChangeX10 = (abs(nowExpVal - expVal) * 1000L) / expVal;
     if (pctChangeX10 > EXP_MAX_ERR) {
       if (pctChangeX10 > EXP_MAX_STEP) {
         if (nowExpVal > expVal) {
